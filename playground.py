@@ -1,75 +1,138 @@
 import tensorflow as tf
 import numpy as np
-from matplotlib import pyplot
-import tensorflow_datasets as tfds
+from load_data import loadMnistDataset
+
+import wandb
+
+model_version = 'v3'
+
+# Starting wandb
+wandb.init(
+    # set the wandb project where this run will be logged
+    project="simple-gan",
+    
+    # track hyperparameters and run metadata
+    config={
+    "learning_rate": 0.0002,
+    "architecture": "GAN",
+    "dataset": "MNIST",
+    "epochs": 500,
+    }
+)
+
 
 # Steps to creating and training our own GAN utilizing the MNIST Dataset
 
-# Load in MNIST dataset
+
+
+# - - - - - - Loading MNIST Dataset - - - - - - 
+
 BATCH_SIZE = 64
-(train_X, train_y), (test_X, test_y) = tf.keras.datasets.mnist.load_data()
-train_X = tf.convert_to_tensor(train_X)
-train_X_ds = tf.data.Dataset.from_tensor_slices(train_X)
-batched_training_ds = train_X_ds.batch(BATCH_SIZE)
+# Load MNIST dataset with batch size of 64
+training_ds_batched = loadMnistDataset()
 
+# - - - - - - Loading MNIST Dataset - - - - - - 
 
+# - - - - - - Generating Fake Data  - - - - - - 
 
-# Create Generator Network 
-# this will take in random noise of size (64, 1), and output generated data of size (784,1)
-generator = tf.keras.Sequential([
-    tf.keras.Input(shape=64),
-    tf.keras.layers.Dense(128, activation='relu'),
-    tf.keras.layers.Dense(256, activation='relu'),
-    tf.keras.layers.Dense(784, activation='sigmoid') # sigmoid activation function as want data to be between 0 and 1
-])
-
-# Create the Discriminator Network
-# This will take in both real and fake data. That means size 784
-discriminator = tf.keras.Sequential([
-    tf.keras.Input(shape=784), 
-    tf.keras.layers.Dense(256, activation='relu'),
-    tf.keras.layers.Dense(64, activation='relu'),
-    tf.keras.layers.Dense(1, activation='sigmoid') # outputs a number between 0 and 1
-])
-
-NOISE_SIZE = 64
+# Generating Fake Data
+NOISE_SIZE = 100
 
 # generates noise with batch_size rows and NOISE_SIZE colomns
-def generateFakeData(batch_size, NOISE_SIZE):
-    random_noise_np = np.random.normal(size=(batch_size, NOISE_SIZE))
-    return tf.convert_to_tensor(random_noise_np)
+def generateRandomNoise(batch_size=BATCH_SIZE, noise_size=NOISE_SIZE):
+    random_noise_np = np.random.normal(size=(batch_size, noise_size))
+    random_noise_tensor = tf.convert_to_tensor(random_noise_np)
+    return tf.reshape(random_noise_tensor, [batch_size, noise_size])
 
+# - - - - - - Generating Fake Data  - - - - - - 
+
+# - - - - - -   Creating Networks   - - - - - - 
+# Create Generator Network 
+# this will take in random noise of size (64, 1), and output generated data of size (784,1)
+# Creating new generator
+# generator = tf.keras.Sequential([
+#     tf.keras.Input(shape=NOISE_SIZE),
+#     tf.keras.layers.Dense(128, activation='relu'),
+#     tf.keras.layers.Dense(256, activation='relu'),
+#     tf.keras.layers.Dense(784, activation='sigmoid') # sigmoid activation function as want data to be between 0 and 1
+# ])
+
+# # Create the Discriminator Network
+# # This will take in both real and fake data. That means size 784
+# discriminator = tf.keras.Sequential([
+#     tf.keras.Input(shape=784), 
+#     tf.keras.layers.Dense(256, activation='relu'),
+#     tf.keras.layers.Dense(64, activation='relu'),
+#     tf.keras.layers.Dense(1, activation='sigmoid') # outputs a scalar
+# ])
+# Loading Generator from Previously Trained Example 
+generator = tf.keras.models.load_model('savedModels/generator-v3/epoch-100', compile=False)
+discriminator = tf.keras.models.load_model('savedModels/discriminator-v3/epoch-100', compile=False)
+start_epoch = 100
+
+# - - - - - -   Creating Networks   - - - - - - 
+
+# - - - - - - Establishing Loss Functions, Optimizer, and Metrics - - - - - - 
 
 # Losses
-batch_size = 32
-fake_labels = tf.zeros(batch_size)
-real_labels = tf.ones(batch_size)
 
+# Original - Probably Incorrect
+# def calculate_discriminator_loss(fake_preds, real_preds):
+#     fake_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_preds, labels=tf.zeros(fake_preds.shape)))
+#     real_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=real_preds, labels=tf.ones(real_preds.shape)))
+#     total_loss = fake_loss + real_loss
+#     return total_loss
+
+# def calculate_generator_loss(fake_preds):
+#     generator_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_preds, labels=tf.zeros(fake_preds.shape)))
+#     return generator_loss
+
+# New, hopefully correct
+# Utilizes equation in paper
+
+
+# Custom Loss Function
+# def calculate_discriminator_loss(fake_preds, real_preds):
+#     return tf.reduce_mean(tf.math.log_sigmoid(real_preds) + tf.math.log_sigmoid(tf.ones(fake_preds.shape) - fake_preds))
+
+# def calculate_generator_loss(fake_preds):
+#     return tf.reduce_mean(-tf.math.log_sigmoid(tf.ones(fake_preds.shape) - fake_preds))
+
+loss_fn = tf.keras.losses.BinaryCrossentropy(from_logits=False)
 def calculate_discriminator_loss(fake_preds, real_preds):
-    fake_loss = tf.keras.losses.BinaryCrossentropy(fake_labels, fake_preds)
-    real_loss = tf.keras.losses.BinaryCrossentropy(real_labels, real_preds)
-    return fake_loss + real_loss
+    fake_preds_loss = loss_fn(tf.zeros(fake_preds.shape), fake_preds)
+    real_preds_loss = loss_fn(tf.ones(real_preds.shape), real_preds)
+    return fake_preds_loss + real_preds_loss
 
 def calculate_generator_loss(fake_preds):
-    generator_loss = tf.keras.losses.BinaryCrossentropy(fake_labels, fake_preds)
-    return generator_loss
+    return loss_fn(tf.ones(fake_preds.shape), fake_preds)
+
+
+# Create the optimizer
+discriminator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0002)
+generator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0002)
+
 
 # initialize metrics
 generator_loss_metric = tf.keras.metrics.Mean()
 discriminator_loss_metric = tf.keras.metrics.Mean()
+real_sample_accuracy = tf.keras.metrics.BinaryAccuracy()
+fake_sample_accuracy = tf.keras.metrics.BinaryAccuracy()
 
+# - - - - - - Establishing Loss Functions - - - - - - 
 
-# Create the optimizer
-optimizer = tf.keras.optimizers.Adam(learning_rate=0.0002)
+# - - - - - - Generating Histories to Graph - - - - - - -
 
-n_epochs = 50
+n_epochs = 200
 
 for epoch in range(n_epochs):
+    total_epoch = start_epoch + epoch
     # sample minibatch size m of real data
     for step, minibatch_real in enumerate(training_ds_batched): 
 
         # sample minibatch size m of noise samples
-        minibatch_fake = generateFakeData(batch_size, NOISE_SIZE)
+        noise = generateRandomNoise(BATCH_SIZE, NOISE_SIZE)
+        minibatch_fake = generator(noise)
 
         # calculate loss for discriminiator
         with tf.GradientTape() as tape:
@@ -78,34 +141,52 @@ for epoch in range(n_epochs):
             discriminator_loss = calculate_discriminator_loss(fake_preds, real_preds)
 
         # calculate gradient for discriminator
-        discriminator_gradients = tape.gradient(discriminator_loss, discriminator.trainable_weights)
+        discriminator_gradients = tape.gradient(discriminator_loss, discriminator.trainable_variables)
         discriminator_loss_metric.update_state(discriminator_loss)
-        
+        real_sample_accuracy.update_state(tf.ones(real_preds.shape), real_preds)
+        fake_sample_accuracy.update_state(tf.zeros(fake_preds.shape), fake_preds)
+        total_sample_accuracy = (real_sample_accuracy.result().numpy() + fake_sample_accuracy.result().numpy()) / 2
+
         # apply gradients
-        optimizer.apply_gradients(zip(discriminator_gradients, discriminator.trainable_weights))
+        discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator.trainable_variables))
 
-        if step % 200 == 0:
-            print("Training loss (for one batch) at step %d. Generator: %.4f" % (step, float(generator_loss)))
-            print("Seen so far: %s samples" % ((step + 1) * batch_size))
+        # train generator network
+        # calculate loss for geneator
+        noise = generateRandomNoise(BATCH_SIZE, NOISE_SIZE)
 
-    # train generator network
-    # sample minibatch size m of noise samples
-        minibatch_fake = generateFakeData(batch_size, NOISE_SIZE)
-
-    # calculate loss for geneator
         with tf.GradientTape() as tape:
+            # sample minibatch size m of noise samples
+            minibatch_fake = generator(noise)
             fake_preds = discriminator(minibatch_fake)
             generator_loss = calculate_generator_loss(fake_preds)
 
         # calculate gradient for generator
-        generator_gradients = tape.gradient(generator_loss, generator.trainable_weights)
+        generator_gradients = tape.gradient(generator_loss, generator.trainable_variables)
         generator_loss_metric.update_state(generator_loss)
 
-        optimizer.apply_gradients(zip(generator_gradients, generator.trainable_weights))
+        generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables))
 
-    print('Epoch: %i Generator Loss: %.4f Discriminator Loss: %.4f',(epoch, generator_loss_metric.result().numpy(), discriminator_loss_metric.result().numpy()))
 
-generator.save('saved_models/generator')
-discriminator.save('saved_model/discriminator')
+    print('Epoch: %i Generator Loss: %.4f Discriminator Loss: %.4f' %(total_epoch, generator_loss_metric.result().numpy(), discriminator_loss_metric.result().numpy()))
+    print('Real Sample Accuracy: %.4f Fake Sample Accuracy: %.4f' %(real_sample_accuracy.result().numpy(), fake_sample_accuracy.result().numpy()))
+    wandb.log({
+        "generator_loss": generator_loss_metric.result().numpy(), 
+        "discriminator_loss": discriminator_loss_metric.result().numpy(),
+        "real_sample_accuracy": real_sample_accuracy.result().numpy(), 
+        "fake_sample_accuracy": fake_sample_accuracy.result().numpy(),
+        "total_sample_accuracy": (total_sample_accuracy), 
+    })
+    generator_loss_metric.reset_states()
+    discriminator_loss_metric.reset_states()
+    real_sample_accuracy.reset_states()
+    fake_sample_accuracy.reset_states()
+    total_sample_accuracy = 0 # this is purely book keeping. not functional
 
+    if epoch % 50 == 0 and not epoch == 0: 
+        generator.save('savedModels/generator-' + model_version + '/epoch-%i' %total_epoch)
+        discriminator.save('savedModels/discriminator-' + model_version + '/epoch-%i' %total_epoch)
+
+wandb.finish()
+generator.save('savedModels/generator-' + model_version + '/final')
+discriminator.save('savedModels/discriminator-' + model_version + '/final')
 
