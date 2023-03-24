@@ -39,4 +39,8 @@ print(fake_labels_2)
 np_data = fake_data_1.numpy()[0]
 img = np.reshape(np_data, (28, 28, 1))
 plt.imshow(img, cmap='gray', vmin=0, vmax=1)
+np_data = fake_data_1.numpy()[0]
+img = np.reshape(np_data, (28, 28, 1))
+plt.imshow(img, cmap='gray', vmin=0, vmax=1)
+plt.show()
 plt.show()
