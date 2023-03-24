@@ -1,10 +1,11 @@
 import tensorflow as tf
 import numpy as np
 from load_data import loadMnistDataset
+from checkpoint_statistics import checkpointModel
 
 import wandb
 
-model_version = 'v3'
+model_version = 'v4'
 
 # Starting wandb
 wandb.init(
@@ -23,11 +24,9 @@ wandb.init(
 
 # Steps to creating and training our own GAN utilizing the MNIST Dataset
 
-
-
 # - - - - - - Loading MNIST Dataset - - - - - - 
 
-BATCH_SIZE = 64
+BATCH_SIZE = 128
 # Load MNIST dataset with batch size of 64
 training_ds_batched = loadMnistDataset()
 
@@ -50,25 +49,30 @@ def generateRandomNoise(batch_size=BATCH_SIZE, noise_size=NOISE_SIZE):
 # Create Generator Network 
 # this will take in random noise of size (64, 1), and output generated data of size (784,1)
 # Creating new generator
-# generator = tf.keras.Sequential([
-#     tf.keras.Input(shape=NOISE_SIZE),
-#     tf.keras.layers.Dense(128, activation='relu'),
-#     tf.keras.layers.Dense(256, activation='relu'),
-#     tf.keras.layers.Dense(784, activation='sigmoid') # sigmoid activation function as want data to be between 0 and 1
-# ])
+generator = tf.keras.Sequential([
+    tf.keras.Input(shape=NOISE_SIZE),
+    tf.keras.layers.Dense(256),
+    tf.keras.layers.LeakyReLU(alpha=0.2),
+    tf.keras.layers.Dense(512),
+    tf.keras.layers.LeakyReLU(alpha=0.2),
+    tf.keras.layers.Dense(1024, activation='sigmoid') # sigmoid activation function as want data to be between 0 and 1
+], name='Generator')
 
-# # Create the Discriminator Network
-# # This will take in both real and fake data. That means size 784
-# discriminator = tf.keras.Sequential([
-#     tf.keras.Input(shape=784), 
-#     tf.keras.layers.Dense(256, activation='relu'),
-#     tf.keras.layers.Dense(64, activation='relu'),
-#     tf.keras.layers.Dense(1, activation='sigmoid') # outputs a scalar
-# ])
+# Create the Discriminator Network
+# This will take in both real and fake data. That means size 784
+discriminator = tf.keras.Sequential([
+    tf.keras.Input(shape=784), 
+    tf.keras.layers.Dense(512),
+    tf.keras.layers.LeakyReLU(alpha=0.2),
+    tf.keras.layers.Dense(256),
+    tf.keras.layers.LeakyReLU(alpha=0.2),
+    tf.keras.layers.Dense(1, activation='sigmoid') # outputs a scalar
+], name='Discriminator')
+
 # Loading Generator from Previously Trained Example 
-generator = tf.keras.models.load_model('savedModels/generator-v3/epoch-100', compile=False)
-discriminator = tf.keras.models.load_model('savedModels/discriminator-v3/epoch-100', compile=False)
-start_epoch = 100
+# generator = tf.keras.models.load_model('savedModels/generator-v3/epoch-100', compile=False)
+# discriminator = tf.keras.models.load_model('savedModels/discriminator-v3/epoch-100', compile=False)
+# start_epoch = 100
 
 # - - - - - -   Creating Networks   - - - - - - 
 
@@ -98,6 +102,7 @@ start_epoch = 100
 # def calculate_generator_loss(fake_preds):
 #     return tf.reduce_mean(-tf.math.log_sigmoid(tf.ones(fake_preds.shape) - fake_preds))
 
+
 loss_fn = tf.keras.losses.BinaryCrossentropy(from_logits=False)
 def calculate_discriminator_loss(fake_preds, real_preds):
     fake_preds_loss = loss_fn(tf.zeros(fake_preds.shape), fake_preds)
@@ -109,8 +114,9 @@ def calculate_generator_loss(fake_preds):
 
 
 # Create the optimizer
-discriminator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0002)
-generator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0002)
+LEARNING_RATE = 0.0002
+discriminator_optimizer = tf.keras.optimizers.Adam(learning_rate=LEARNING_RATE)
+generator_optimizer = tf.keras.optimizers.Adam(learning_rate=LEARNING_RATE)
 
 
 # initialize metrics
@@ -123,10 +129,10 @@ fake_sample_accuracy = tf.keras.metrics.BinaryAccuracy()
 
 # - - - - - - Generating Histories to Graph - - - - - - -
 
-n_epochs = 200
+n_epochs = 500
 
 for epoch in range(n_epochs):
-    total_epoch = start_epoch + epoch
+
     # sample minibatch size m of real data
     for step, minibatch_real in enumerate(training_ds_batched): 
 
@@ -167,7 +173,7 @@ for epoch in range(n_epochs):
         generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables))
 
 
-    print('Epoch: %i Generator Loss: %.4f Discriminator Loss: %.4f' %(total_epoch, generator_loss_metric.result().numpy(), discriminator_loss_metric.result().numpy()))
+    print('Epoch: %i Generator Loss: %.4f Discriminator Loss: %.4f' %(epoch, generator_loss_metric.result().numpy(), discriminator_loss_metric.result().numpy()))
     print('Real Sample Accuracy: %.4f Fake Sample Accuracy: %.4f' %(real_sample_accuracy.result().numpy(), fake_sample_accuracy.result().numpy()))
     wandb.log({
         "generator_loss": generator_loss_metric.result().numpy(), 
@@ -183,8 +189,11 @@ for epoch in range(n_epochs):
     total_sample_accuracy = 0 # this is purely book keeping. not functional
 
     if epoch % 50 == 0 and not epoch == 0: 
-        generator.save('savedModels/generator-' + model_version + '/epoch-%i' %total_epoch)
-        discriminator.save('savedModels/discriminator-' + model_version + '/epoch-%i' %total_epoch)
+        generator.save('savedModels/generator-' + model_version + '/epoch-%i' %epoch)
+        discriminator.save('savedModels/discriminator-' + model_version + '/epoch-%i' %epoch)
+
+
+    checkpointModel(generator)
 
 wandb.finish()
 generator.save('savedModels/generator-' + model_version + '/final')
