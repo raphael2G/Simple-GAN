@@ -12,13 +12,30 @@ def generateFakeData(model_reference, batch_size=64, noise_size=100):
 
     return fake_data
 
-def checkpointModel(model_reference, epoch, dir='images/v4', batch_size=64, noise_size=100):
-    path = os.path.join(dir, ('v4-' + epoch))
-    os.mkdir(path)
+
+# Define Checkpoint Function
+def checkpointModel(model_reference, epoch, model_version, batch_size=5, noise_size=100):
+    dir = os.path.join('images', model_version)
+    
+    try: 
+        os.mkdir(dir)
+    except: 
+        print()
+    
+    path = os.path.join(dir, ('Epoch-' + str(epoch)))
+    try: 
+        os.mkdir(path)
+    except: 
+        print('image path already exists. Overwriting Old Data')
+
 
     generated_imgs_batched = generateFakeData(model_reference, batch_size, noise_size).numpy()
+    formated_arr = np.reshape(generated_imgs_batched, (batch_size, 28, 28, 1))
+    with open(os.path.join(path, 'generator-' + model_version), 'x') as f:
+        np.save(f, formated_arr)
 
-    for i, vector in enumerate(generated_imgs_batched):
-        formated_arr = np.reshape(vector, (28, 28, 1))
-        plt.imshow(formated_arr, cmap='gray', vmin=0, vmax=1)
-        plt.savefig(path + '-' + i)
+    # how to view the data
+    # for i, vector in enumerate(generated_imgs_batched):
+    #     formated_arr = np.reshape(vector, (28, 28, 1))
+    #     plt.imshow(formated_arr, cmap='gray', vmin=-1, vmax=1)
+    #     plt.savefig(os.path.join(path, 'generator-' + 'v5' + '-' + str(i)))
