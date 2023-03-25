@@ -5,7 +5,7 @@ from checkpoint_statistics import checkpointModel
 
 import wandb
 
-model_version = 'v4'
+model_version = 'v6'
 
 # Starting wandb
 wandb.init(
@@ -17,7 +17,7 @@ wandb.init(
     "learning_rate": 0.0002,
     "architecture": "GAN",
     "dataset": "MNIST",
-    "epochs": 500,
+    "epochs": 10,
     }
 )
 
@@ -35,7 +35,7 @@ training_ds_batched = loadMnistDataset()
 # - - - - - - Generating Fake Data  - - - - - - 
 
 # Generating Fake Data
-NOISE_SIZE = 100
+NOISE_SIZE = 10
 
 # generates noise with batch_size rows and NOISE_SIZE colomns
 def generateRandomNoise(batch_size=BATCH_SIZE, noise_size=NOISE_SIZE):
@@ -55,7 +55,9 @@ generator = tf.keras.Sequential([
     tf.keras.layers.LeakyReLU(alpha=0.2),
     tf.keras.layers.Dense(512),
     tf.keras.layers.LeakyReLU(alpha=0.2),
-    tf.keras.layers.Dense(1024, activation='sigmoid') # sigmoid activation function as want data to be between 0 and 1
+    tf.keras.layers.Dense(1024),
+    tf.keras.layers.LeakyReLU(alpha=0.2),
+    tf.keras.layers.Dense(784, activation=tf.keras.activations.tanh) # tanh activation function as want data to be between 0 and 1
 ], name='Generator')
 
 # Create the Discriminator Network
@@ -129,7 +131,7 @@ fake_sample_accuracy = tf.keras.metrics.BinaryAccuracy()
 
 # - - - - - - Generating Histories to Graph - - - - - - -
 
-n_epochs = 500
+n_epochs = 200
 
 for epoch in range(n_epochs):
 
@@ -193,7 +195,7 @@ for epoch in range(n_epochs):
         discriminator.save('savedModels/discriminator-' + model_version + '/epoch-%i' %epoch)
 
 
-    checkpointModel(generator)
+    checkpointModel(generator, epoch, model_version, noise_size=NOISE_SIZE)
 
 wandb.finish()
 generator.save('savedModels/generator-' + model_version + '/final')
