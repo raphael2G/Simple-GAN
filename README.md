@@ -1,6 +1,10 @@
 # Simple-GAN
 This is a simple implementation of a GAN trained in tensorflow utilizing the MNIST dataset. 
 
+![Alt Text](https://github.com/raphael2G/Simple-GAN/blob/main/output.gif)
+
+
+
 # What it does
 This model is capable of generating images of handwritten digits. See examples below
 
