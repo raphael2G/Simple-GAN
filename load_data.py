@@ -8,7 +8,7 @@ def loadMnistDataset(batch_size=64, input_shape=(28, 28)):
     np.random.shuffle(train_X)
 
     # noramlizes and flattens dataset in numpy array
-    flattened = np.reshape(train_X/255.0, [len(train_X), input_shape[0] * input_shape[1]])
+    flattened = np.reshape((train_X-127.5)/127.5, [len(train_X), input_shape[0] * input_shape[1]])
 
     # Loads np array into a Dataset object
     train_X_ds = tf.data.Dataset.from_tensor_slices(flattened)
