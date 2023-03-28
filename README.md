@@ -12,4 +12,4 @@ This model is capable of generating images of handwritten digits. The gif below 
 To create a GAN utilizing the MNIST dataset, both a generator network and a discriminator network must be defined. The generator network is typically a deep convolutional neural network (CNN) which takes a random noise vector as input and outputs a generated image. However, for a simple proof-of-concept the generator was simply a MLP. The discriminator network is also a MLP which takes the generated image as input and outputs a probability score. The two networks are trained together, with the generator attempting to generate images that the discriminator is unable to distinguish from the real images. The generator and discriminator are optimized using a loss function, such as the binary cross-entropy loss for a binary classification problem. This was constructed utilizing the tensorflow API. 
 
 # Training Data
-In depth training data is available and wandb.ai/raphael2G/simple-gan
+In depth training data is available via [wandb](https://wandb.ai/raphael1/simple-gan/runs/1e4uw5zq?workspace=user-raphael1)
