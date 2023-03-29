@@ -65,12 +65,16 @@ def trainingLoop(generator_reference, discriminator_reference, training_ds_batch
     # initialize metrics
     generator_loss_metric = tf.keras.metrics.Mean()
     discriminator_loss_metric = tf.keras.metrics.Mean()
+    
     real_sample_accuracy = tf.keras.metrics.BinaryAccuracy()
     fake_sample_accuracy = tf.keras.metrics.BinaryAccuracy()
 
-    n_epochs = 200
+    false_negatives = tf.keras.metrics.FalseNegatives()
+    false_positives = tf.keras.metrics.FalsePositives()
+    true_negatives = tf.keras.metrics.TrueNegatives()
+    true_positives = tf.keras.metrics.TruePositives()
 
-    for epoch in range(n_epochs):
+    for epoch in range(N_EPOCHS):
 
         # sample minibatch size m of real data
         for minibatch_real in training_ds_batched: 
@@ -88,9 +92,22 @@ def trainingLoop(generator_reference, discriminator_reference, training_ds_batch
             # calculate gradient for discriminator
             discriminator_gradients = tape.gradient(discriminator_loss, discriminator_reference.trainable_variables)
             discriminator_loss_metric.update_state(discriminator_loss)
+
             real_sample_accuracy.update_state(tf.ones(real_preds.shape), real_preds)
             fake_sample_accuracy.update_state(tf.zeros(fake_preds.shape), fake_preds)
-            total_sample_accuracy = (real_sample_accuracy.result().numpy() + fake_sample_accuracy.result().numpy()) / 2
+
+            # update real data
+            false_negatives.update_state(tf.ones(real_preds.shape), real_preds)
+            false_positives.update_state(tf.ones(real_preds.shape), real_preds)
+            true_negatives.update_state(tf.ones(real_preds.shape), real_preds)
+            true_positives.update_state(tf.ones(real_preds.shape), real_preds)
+
+
+            # update fake data
+            false_negatives.update_state(tf.zeros(fake_preds.shape), fake_preds)
+            false_positives.update_state(tf.zeros(fake_preds.shape), fake_preds)
+            true_negatives.update_state(tf.zeros(fake_preds.shape), fake_preds)
+            true_positives.update_state(tf.zeros(fake_preds.shape), fake_preds)
 
             # apply gradients
             discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator_reference.trainable_variables))
@@ -117,16 +134,20 @@ def trainingLoop(generator_reference, discriminator_reference, training_ds_batch
         wandb.log({
             "generator_loss": generator_loss_metric.result().numpy(), 
             "discriminator_loss": discriminator_loss_metric.result().numpy(),
+
             "real_sample_accuracy": real_sample_accuracy.result().numpy(), 
             "fake_sample_accuracy": fake_sample_accuracy.result().numpy(),
-            "total_sample_accuracy": (total_sample_accuracy), 
+
+            "false_positives": false_positives.result().numpy(),
+            "false_negatives": false_negatives.result().numpy(),
+            "true_positives": true_positives.result().numpy(),
+            "true_negatives": true_negatives.result().numpy(),
         })
 
         generator_loss_metric.reset_states()
         discriminator_loss_metric.reset_states()
         real_sample_accuracy.reset_states()
         fake_sample_accuracy.reset_states()
-        total_sample_accuracy = 0 # this is purely book keeping. not functional
 
         if epoch % 50 == 0 and not epoch == 0: 
             generator_reference.save('savedModels/generator-' + MODEL_VERSION + '/epoch-%i' %epoch)
