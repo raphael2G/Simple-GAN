@@ -5,10 +5,12 @@ import glob
 import math
 import os
 
+MODEL_VERSION = 'v5'
+
 base_path = 'images/v5'
 complete_path = os.path.join(base_path, 'complete')
 epochs = os.listdir(base_path)
-gif_name = os.path.join(base_path, 'v5.gif')
+gif_path = os.path.join('images/gifs', MODEL_VERSION + '.gif')
 duration = 200 # duration of each frame in milliseconds
 
 try: 
@@ -62,5 +64,5 @@ for image in sorted_folders:
     frames.append(Image.open(image))
 
 # Save the frames as a GIF file
-frames[0].save(gif_name, format='GIF', append_images=frames[1:], save_all=True, duration=duration, loop=0)
+frames[0].save(gif_path, format='GIF', append_images=frames[1:], save_all=True, duration=duration, loop=0)
 
