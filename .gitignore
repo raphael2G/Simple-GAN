@@ -1,8 +1,5 @@
+.gitignore
 __pycache__
-savedModels/discriminator-v1
-savedModels/generator-v1
-savedModels/discriminator-v2
-savedModels/generator-v2
-savedModels/discriminator-v3
-savedModels/generator-v3
+savedModels
 wandb
+images
