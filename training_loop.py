@@ -57,7 +57,7 @@ def calculate_generator_loss(fake_preds):
     return loss_fn(tf.ones(fake_preds.shape), fake_preds)
 
 # - - - - - - DEFINE TRAINING LOOP - - - - - - 
-def trainingLoop(generator_reference, discriminator_reference, training_ds_batched):
+def trainingLoop(generator_reference, discriminator_reference, training_ds_batched, checkpoint_interval=50, save_images_interval=1):
     # Create the optimizer
     discriminator_optimizer = tf.keras.optimizers.Adam(learning_rate=LEARNING_RATE)
     generator_optimizer = tf.keras.optimizers.Adam(learning_rate=LEARNING_RATE)
@@ -88,49 +88,48 @@ def trainingLoop(generator_reference, discriminator_reference, training_ds_batch
                 fake_preds = discriminator_reference(minibatch_fake)
                 real_preds = discriminator_reference(minibatch_real)
                 discriminator_loss = calculate_discriminator_loss(fake_preds, real_preds)
-
             # calculate gradient for discriminator
             discriminator_gradients = tape.gradient(discriminator_loss, discriminator_reference.trainable_variables)
-            discriminator_loss_metric.update_state(discriminator_loss)
-
-            real_sample_accuracy.update_state(tf.ones(real_preds.shape), real_preds)
-            fake_sample_accuracy.update_state(tf.zeros(fake_preds.shape), fake_preds)
-
-            # update real data
-            false_negatives.update_state(tf.ones(real_preds.shape), real_preds)
-            false_positives.update_state(tf.ones(real_preds.shape), real_preds)
-            true_negatives.update_state(tf.ones(real_preds.shape), real_preds)
-            true_positives.update_state(tf.ones(real_preds.shape), real_preds)
-
-
-            # update fake data
-            false_negatives.update_state(tf.zeros(fake_preds.shape), fake_preds)
-            false_positives.update_state(tf.zeros(fake_preds.shape), fake_preds)
-            true_negatives.update_state(tf.zeros(fake_preds.shape), fake_preds)
-            true_positives.update_state(tf.zeros(fake_preds.shape), fake_preds)
-
             # apply gradients
             discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator_reference.trainable_variables))
 
-            # train generator network
             # calculate loss for geneator
             noise = generateRandomNoise(BATCH_SIZE, NOISE_SIZE)
-
             with tf.GradientTape() as tape:
                 # sample minibatch size m of noise samples
                 minibatch_fake = generator_reference(noise)
                 fake_preds = discriminator_reference(minibatch_fake)
                 generator_loss = calculate_generator_loss(fake_preds)
-
             # calculate gradient for generator
             generator_gradients = tape.gradient(generator_loss, generator_reference.trainable_variables)
+            generator_optimizer.apply_gradients(zip(generator_gradients, generator_reference.trainable_variables))
+
+
+            # update loss metrics 
+            discriminator_loss_metric.update_state(discriminator_loss)
             generator_loss_metric.update_state(generator_loss)
 
-            generator_optimizer.apply_gradients(zip(generator_gradients, generator_reference.trainable_variables))
+            # update accuracy metrics 
+            real_sample_accuracy.update_state(tf.ones(real_preds.shape), real_preds)
+            fake_sample_accuracy.update_state(tf.zeros(fake_preds.shape), fake_preds)
+
+            # update real data to confusion matrix
+            false_negatives.update_state(tf.ones(real_preds.shape), real_preds)
+            false_positives.update_state(tf.ones(real_preds.shape), real_preds)
+            true_negatives.update_state(tf.ones(real_preds.shape), real_preds)
+            true_positives.update_state(tf.ones(real_preds.shape), real_preds)
+
+            # update fake data to confusion matrix
+            false_negatives.update_state(tf.zeros(fake_preds.shape), fake_preds)
+            false_positives.update_state(tf.zeros(fake_preds.shape), fake_preds)
+            true_negatives.update_state(tf.zeros(fake_preds.shape), fake_preds)
+            true_positives.update_state(tf.zeros(fake_preds.shape), fake_preds)
+
 
 
         print('Epoch: %i Generator Loss: %.4f Discriminator Loss: %.4f' %(epoch, generator_loss_metric.result().numpy(), discriminator_loss_metric.result().numpy()))
         print('Real Sample Accuracy: %.4f Fake Sample Accuracy: %.4f' %(real_sample_accuracy.result().numpy(), fake_sample_accuracy.result().numpy()))
+    
         wandb.log({
             "generator_loss": generator_loss_metric.result().numpy(), 
             "discriminator_loss": discriminator_loss_metric.result().numpy(),
@@ -146,14 +145,22 @@ def trainingLoop(generator_reference, discriminator_reference, training_ds_batch
 
         generator_loss_metric.reset_states()
         discriminator_loss_metric.reset_states()
+
         real_sample_accuracy.reset_states()
         fake_sample_accuracy.reset_states()
 
-        if epoch % 50 == 0 and not epoch == 0: 
+        false_positives.reset_states()
+        false_negatives.reset_states()
+        true_positives.reset_states()
+        true_negatives.reset_states()
+
+
+        if epoch % checkpoint_interval == 0 and not epoch == 0: 
             generator_reference.save('savedModels/generator-' + MODEL_VERSION + '/epoch-%i' %epoch)
             discriminator_reference.save('savedModels/discriminator-' + MODEL_VERSION + '/epoch-%i' %epoch)
 
-        checkpointModel(generator_reference, epoch, MODEL_VERSION, noise_size=NOISE_SIZE)
+        if epoch % save_images_interval == 0: 
+            checkpointModel(generator_reference, epoch, MODEL_VERSION, noise_size=NOISE_SIZE)
 
     # wandb.finish()
     # generator_reference.save('savedModels/generator-' + MODEL_VERSION + '/final')
