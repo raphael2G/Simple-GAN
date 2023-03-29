@@ -3,7 +3,7 @@ import numpy as np
 
 def loadMnistDataset(batch_size=64, input_shape=(28, 28)):
     # Load in MNIST dataset as numpy array
-    (train_X, train_y), (test_X, test_y) = tf.keras.datasets.mnist.load_data()
+    (train_X, _), (_, _) = tf.keras.datasets.mnist.load_data()
 
     np.random.shuffle(train_X)
 
